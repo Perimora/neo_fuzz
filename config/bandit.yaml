@@ -1,0 +1,17 @@
+exclude_dirs:
+  - .venv
+  - __pycache__
+
+skips:
+  - B101   # assert used
+  - B311   # standard pseudo-random (random module)
+  - B404   # subprocess without shell=False
+  - B603   # subprocess with shell=True
+  - B607   # start process with partial path
+
+severity: medium
+confidence: medium
+
+targets:
+  - src
+  - test
