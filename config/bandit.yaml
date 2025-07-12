@@ -1,6 +1,7 @@
 exclude_dirs:
   - .venv
   - __pycache__
+  - submodules
 
 skips:
   - B101   # assert used

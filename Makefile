@@ -5,8 +5,8 @@ BLUE=\033[0;34m
 NC=\033[0m 
 
 ifneq (,$(wildcard config/.env))
-    include config/.env
-    export
+	include config/.env
+	export
 endif
 
 VENV_ROOT=.venv
