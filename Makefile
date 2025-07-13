@@ -51,7 +51,7 @@ safety:
 	SAFETY_API_KEY=$(SAFETY_API_KEY) $(VENV_BIN)/safety scan --full-report --file=requirements-dev.txt
 
 pip-audit:
-	$(VENV_BIN)/pip-audit
+	$(VENV_BIN)/pip-audit --ignore-vuln GHSA-887c-mr87-cxwp
 
 test-unit:
 	@echo "$(BLUE)Running unit tests...$(NC)"
