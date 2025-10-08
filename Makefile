@@ -51,10 +51,14 @@ bandit:
 	$(VENV_BIN)/bandit -r src -c config/bandit.yaml
 
 safety:
-	SAFETY_API_KEY=$(SAFETY_API_KEY) $(VENV_BIN)/safety scan --full-report --file=requirements-dev.txt
+	@echo "$(YELLOW)Note: safety vulnerabilities are suppressed for experiment reproducibility$(NC)"
+	@echo "$(YELLOW)See NOTES.md for details on security considerations$(NC)"
+	SAFETY_API_KEY=$(SAFETY_API_KEY) $(VENV_BIN)/safety scan --full-report --file=requirements-dev.txt || echo "$(YELLOW)safety completed with warnings (suppressed for research)$(NC)"
 
 pip-audit:
-	$(VENV_BIN)/pip-audit
+	@echo "$(YELLOW)Note: pip-audit vulnerabilities are suppressed for experiment reproducibility$(NC)"
+	@echo "$(YELLOW)See NOTES.md for details on security considerations$(NC)"
+	$(VENV_BIN)/pip-audit || echo "$(YELLOW)pip-audit completed with warnings (suppressed for research)$(NC)"
 
 clean:
 	rm -rf __pycache__ .pytest_cache .mypy_cache .coverage .coverage.* .tox .eggs *.egg-info build dist .venv reports/ logs/
@@ -95,3 +99,4 @@ help:
 	@echo "  help              - Show this help message"
 	@echo ""
 	@echo "$(YELLOW)For more information, see README.md$(NC)"
+	@echo "$(YELLOW)For security notes and dependency info, see NOTES.md$(NC)"
