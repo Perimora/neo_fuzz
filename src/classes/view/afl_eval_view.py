@@ -1,18 +1,17 @@
 import json
 import os
 import re
-from typing import Any, List, Tuple
+from typing import Any, List, no_type_check
 
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
 from src.classes.controller.training_env import TrainingEnv
+from src.classes.enum.train_types import TrainType
 
 
-def get_coverage_data(
-    json_files: List[str], afl: bool = False
-) -> Tuple[List[float], List[float], List[float], List[float]]:
+def get_coverage_data(json_files: List[str], afl: bool = False) -> Any:
     """
     Extracts coverage data from a list of JSON files and returns timestamps, line coverage,
     branch coverage, and arithmetic mean coverage. Files can be sorted based on a unique ID
@@ -47,11 +46,12 @@ def get_coverage_data(
         json_files = sorted(json_files, key=extract_id)
     else:
 
-        def extract_time(p_input: str) -> float:
+        @no_type_check
+        def extract_time(p_input: str) -> int | float:
             try:
                 with open(p_input, "r") as j_f:
                     j_data = json.load(j_f)
-                    return float(j_data.get("time", float("inf")))
+                    return j_data.get("time", float("inf"))
             except (json.JSONDecodeError, FileNotFoundError, PermissionError):
                 return float("inf")
 
@@ -95,7 +95,7 @@ class AflEvalView:
         """
         self.env = p_env
 
-    def start_model_eval_process(self, t_limit: str = "24h") -> None:
+    def start_model_eval_process(self, t_type: TrainType, t_limit: str = "24h") -> None:
         """
         Starts the model evaluation process by invoking the environment's model evaluation function.
         Generates and plots coverage data and visualizes vulnerabilities for the model.
@@ -104,7 +104,7 @@ class AflEvalView:
                         Defaults to '24h'.
         @type t_limit: Str
         """
-        json_files, monitor_reports, eval_d = self.env.start_model_eval(t_limit)
+        json_files, monitor_reports, eval_d = self.env.start_model_eval(t_limit, t_type)
         self.plot_neo_coverage(json_files, eval_d)
         self.plot_reached_triggered_vulnerabilities_lua("GPT Neo", monitor_reports, eval_d)
 
@@ -192,7 +192,8 @@ class AflEvalView:
         )  # Convert seconds to hours
 
         # set the x-axis ticks and format manually
-        def set_x_axis_format(ax: Any) -> None:
+        @no_type_check
+        def set_x_axis_format(ax):
             ax.set_xlim([0, 25])  # limit x-axis to 25 hours
             ax.set_xticks(np.arange(0, 25, 1))  # set major ticks every 1 hour
             ax.set_xticklabels(

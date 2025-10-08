@@ -204,7 +204,7 @@ class DataHandler:
 
         # set core count and batch size for preprocessing
         # you might want to tune these settings...
-        num_proc = 16
+        num_proc = 8
         batch_size = 5000
 
         # remove comments
@@ -341,7 +341,7 @@ class DataHandler:
 
         @return: None
         """
-        tokenizer.pad_token = "[PAD]"  # nosec
+        tokenizer.pad_token = tokenizer.eos_token  # nosec
 
         # define tokenize function
         def tokenize_function(examples: dict[str, list[str]]) -> BatchEncoding | Any:

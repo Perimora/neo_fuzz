@@ -9,6 +9,7 @@ skips:
   - B404   # subprocess without shell=False
   - B603   # subprocess with shell=True
   - B607   # start process with partial path
+  - B615   # huggingface unsafe download (false positive for local models)
 
 severity: medium
 confidence: medium

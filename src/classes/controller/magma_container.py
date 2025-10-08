@@ -61,8 +61,17 @@ class MagmaContainer:
 
         # run the subprocess without blocking
         try:
+
+            # TODO DBG
+            print(f"Current working directory: {os.getcwd()}")
             self.docker_process = subprocess.Popen(
-                ["magma/tools/captain/run_container.sh", "-d", "workdir", "-t", f"{time_limit}"],
+                [
+                    "submodules/magma_neo_fuzz/tools/captain/run_container.sh",
+                    "-d",
+                    "workdir",
+                    "-t",
+                    f"{time_limit}",
+                ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,

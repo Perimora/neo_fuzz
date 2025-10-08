@@ -1,0 +1,8 @@
+# Suppress PyTorch CVE-2025-3730 (GHSA-887c-mr87-cxwp)
+# Rationale: ctc_loss function not used in this codebase
+# Impact: LOW - DoS vulnerability in unused component
+# Action: Monitor for patch, update when available
+GHSA-887c-mr87-cxwp
+
+# Alternative format if above doesn't work:
+# CVE-2025-3730

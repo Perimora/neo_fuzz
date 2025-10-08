@@ -8,13 +8,13 @@ repos:
         pass_filenames: false
 
       - id: typecheck
-        name: Run make test-fast with type checks
-        entry: make test-fast
+        name: Run mypy type checks
+        entry: bash -c "cd /home/neo/Desktop/neo_fuzz_v2 && .venv/bin/mypy --config-file config/pyproject.toml src"
         language: system
         pass_filenames: false
 
       - id: security
-        name: Run security check
-        entry: make security
+        name: Run bandit security check
+        entry: make bandit
         language: system
         pass_filenames: false

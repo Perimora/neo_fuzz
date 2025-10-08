@@ -1,4 +1,5 @@
 import glob
+import logging
 import os
 import random
 import re
@@ -6,11 +7,12 @@ import shutil
 import subprocess
 import time
 from datetime import datetime
-from typing import Any
+from typing import Any, no_type_check
 
 import torch
 import wandb
 from datasets import tqdm
+from dotenv import load_dotenv
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.data.data_collator import DataCollatorForLanguageModeling
 from transformers.modeling_utils import PreTrainedModel
@@ -25,6 +27,8 @@ from src.classes.enum.targets import Target
 from src.classes.enum.train_datatypes import DataSetType
 from src.classes.enum.train_types import TrainType
 from src.classes.model.data_handler import DataHandler
+
+logger = logging.getLogger("app.dev")
 
 
 def parse_time_input(time_str: str) -> int:
@@ -75,10 +79,13 @@ class TrainingEnv:
         @return: None
         """
 
+        # Load path configuration from env file
+        load_dotenv("config/path.env")
+
         # neo model and tokenizer
         self.model_name = model_name
         self.model = AutoModelForCausalLM.from_pretrained(model_name)  # nosec
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)  # type: ignore # nosec
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)  # nosec
 
         # DataHandler collection
         self.data_handlers = [DataHandler(target)]
@@ -87,12 +94,19 @@ class TrainingEnv:
         self.magma_train_docker: list[MagmaContainer] = []
         self.magma_eval_docker: list[MagmaContainer] = []
 
-        # path variables
-        self.path_model_dir = "models"
-        self.path_tokenizer_dir = "./tokenizer"
-        self.path_ssl_model = f"{self.path_model_dir}/ssl"
-        self.path_ppo_structure_model = f"{self.path_model_dir}/ppo/structure"
-        self.path_ppo_coverage_model = f"{self.path_model_dir}/ppo/coverage"
+        # path variables from environment
+        self.path_model_dir = os.getenv("MODEL_DIR", "models")
+        self.path_tokenizer_dir = os.getenv("TOKENIZER_DIR", "tokenizer")
+        self.path_ssl_model = os.getenv("SSL_MODEL_PATH", "models/ssl")
+        self.path_ppo_structure_model = os.getenv(
+            "PPO_STRUCTURE_MODEL_PATH", "models/ppo/structure"
+        )
+        self.path_ppo_coverage_model = os.getenv("PPO_COVERAGE_MODEL_PATH", "models/ppo/coverage")
+
+        # additional path variables
+        self.path_eval_dir = os.getenv("EVAL_DIR", "logs/eval")
+        self.path_shared_dir = os.getenv("SHARED_DIR", "workdir")
+        self.path_corpus_dir = os.getenv("CORPUS_DIR", "data/lua/corpus_used_afl")
 
         self.init_path_variables()
 
@@ -116,7 +130,7 @@ class TrainingEnv:
             lua_dh.tokenize_ssl(self.tokenizer, self.path_tokenizer_dir)
         # start the actual ssl training
         # reload tokenizer (added eos token as pad)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.path_tokenizer_dir)  # type: ignore # nosec
+        self.tokenizer = AutoTokenizer.from_pretrained(self.path_tokenizer_dir)  # nosec
         # load tokenized data
         ds = lua_dh.ssl_data_tokenized
         if ds is None:
@@ -190,10 +204,8 @@ class TrainingEnv:
         config = PPOConfig(
             model_name=m_name,
             learning_rate=1.41e-5,  # default learn rate
-            batch_size=8,
-            # half of the default batch size due to memory issues -- increase if possible for better training stability
-            # and performance
-            mini_batch_size=8,
+            batch_size=16,  # memory issues -- increase if possible for better training stability
+            mini_batch_size=4,
             log_with="wandb",  # remove if you don't need
             ppo_epochs=1,
         )
@@ -244,7 +256,7 @@ class TrainingEnv:
         )
 
         generation_kwargs = {
-            "min_length": 30,
+            "min_length": 1,
             "top_k": 0.0,
             "top_p": 1.0,
             "do_sample": True,
@@ -334,17 +346,22 @@ class TrainingEnv:
         @rtype: Bool
         """
 
+        logger.info("TrainingEnv: Starting data initialization workflow")
+
         # get corresponding DataHandler object
         lua_dh = self.get_data_handler_by_target()
         if lua_dh is None:
-            print("Error: No data handler available for data initialization")
+            logger.error("TrainingEnv: No data handler available for data initialization")
             return False
 
-        # load dataset via Lua DataHandler of TrainingEnv with pinned revision for security
+        # load dataset via Lua DataHandler of TrainingEnv
+        logger.info("TrainingEnv: Loading dataset from hub...")
         lua_dh.load_dataset_from_hub("bigcode/the-stack")
         # remove all comments and whitespaces; filter empty entries
+        logger.info("TrainingEnv: Removing comments and cleaning data...")
         lua_dh.remove_comments()
         # generate ssl, ppo and backup data split
+        logger.info("TrainingEnv: Generating data splits...")
         lua_dh.generate_data_split()
         # save datasets to disk
         lua_dh.save_to_disk(DataSetType.SSL)
@@ -354,6 +371,7 @@ class TrainingEnv:
         lua_dh.ppo_data_cleanup()
         lua_dh.save_to_disk(DataSetType.PPO_CLEAN)
 
+        logger.info("TrainingEnv: Data initialization completed successfully")
         return True
 
     # Setter
@@ -361,7 +379,7 @@ class TrainingEnv:
         self.model = AutoModelForCausalLM.from_pretrained(model)  # nosec
 
     def set_tokenizer(self, tokenizer: str) -> None:
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer)  # type: ignore # nosec
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer)  # nosec
 
     def add_data_handler(self, data_handler: DataHandler) -> None:
         self.data_handlers.append(data_handler)
@@ -434,7 +452,18 @@ class TrainingEnv:
                  percentage of rejected mutations, and the directory path for evaluation logs.
         @rtype: Tuple(int, float, float, str)
         """
-        tokenizer = AutoTokenizer.from_pretrained(self.path_tokenizer_dir)  # type: ignore # nosec
+
+        logger.info(f"Starting {phase.value} evaluation...")
+
+        tokenizer = AutoTokenizer.from_pretrained(self.path_tokenizer_dir)  # nosec
+
+        # load correct model for evaluation phase
+        if phase is TrainType.SSL:
+            self.model = AutoModelForCausalLM.from_pretrained(self.path_ssl_model)
+        elif phase is TrainType.PPO_STRUCTURE:
+            self.model = AutoModelForCausalLM.from_pretrained(self.path_ppo_structure_model)
+        elif phase is TrainType.PPO_COVERAGE:
+            self.model = AutoModelForCausalLM.from_pretrained(self.path_ppo_coverage_model)
 
         # generate mutation for given prompt
         def generate_code(
@@ -445,7 +474,7 @@ class TrainingEnv:
             num_return_sequences: int = 1,
         ) -> list[str]:
             inputs = p_tokenizer.encode(p_prompt, return_tensors="pt")
-            outputs = p_model.generate(  # type: ignore
+            outputs = p_model.generate(
                 inputs,
                 max_new_tokens=max_new_tokens,
                 num_return_sequences=num_return_sequences,
@@ -474,6 +503,7 @@ class TrainingEnv:
                     backup = data_handler.backup_data
 
         if not backup:
+            logger.error("Could not load backup dataset")
             print("Error: Could not load backup dataset")
             return 0, 0.0, 0.0, ""
 
@@ -482,8 +512,7 @@ class TrainingEnv:
 
         # truncate input string randomly
         def truncate_input(input_str: str) -> str:
-            length = int(ls())
-            truncated = input_str[:length]
+            truncated = input_str[: ls()]
             return truncated
 
         # number of rejected and accepted mutations
@@ -495,7 +524,7 @@ class TrainingEnv:
 
         # create directories for the eval run
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        eval_dir = f"logs/eval/{timestamp}_{phase.value}"
+        eval_dir = f"{self.path_eval_dir}/{timestamp}_{phase.value}"
         mutations_dir = f"{eval_dir}/mutations"
 
         os.makedirs(mutations_dir, exist_ok=True)
@@ -540,6 +569,11 @@ class TrainingEnv:
         accepted_percent = (accepted / total) * 100
         rejected_percent = (rejected / total) * 100
 
+        logger.info(
+            f"Evaluation completed: {total} examples processed, "
+            f"{accepted_percent:.2f}% accepted, {rejected_percent:.2f}% rejected."
+        )
+
         return total, accepted_percent, rejected_percent, eval_dir
 
     def get_train_docker_by_name(self, n: str) -> MagmaContainer | None:
@@ -573,7 +607,7 @@ class TrainingEnv:
         return None
 
     def start_model_eval(
-        self, time_limit: str, target: Target = Target.LUA
+        self, time_limit: str, t_type: TrainType, target: Target = Target.LUA
     ) -> tuple[list[str], list[str], str]:
         """
         Starts an evaluation process for the model within a Docker container over a specified time limit.
@@ -590,6 +624,12 @@ class TrainingEnv:
         @rtype: Tuple(list of str, list of str, str)
         """
 
+        # load ppo model for evaluation
+        if t_type == TrainType.PPO_STRUCTURE:
+            self.model = AutoModelForCausalLM.from_pretrained(self.path_ppo_structure_model)
+        elif t_type == TrainType.PPO_COVERAGE:
+            self.model = AutoModelForCausalLM.from_pretrained(self.path_ppo_coverage_model)
+
         # parse given time string and get total evaluation time in seconds
         time_limit_seconds = parse_time_input(time_limit)
         neo_docker_name = f"neo_{target.value}_eval_docker"
@@ -598,14 +638,14 @@ class TrainingEnv:
 
         # since default location is mandatory, for monitor support move the files
         neo_docker.run_command("./scripts/neo/setup_docker_monitoring.sh")
-        shared_directory = "workdir"
+        shared_directory = self.path_shared_dir
         os.makedirs(f"{shared_directory}/inputs", exist_ok=True)
 
         # setup path to seed corpora
-        seed_directory = "data/lua/corpus_used_afl"
+        seed_directory = self.path_corpus_dir
 
         time_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        eval_dir = f"logs/eval/{time_stamp}_neo_lua_evaluation"
+        eval_dir = f"{self.path_eval_dir}/{time_stamp}_neo_lua_evaluation"
         os.makedirs(eval_dir, exist_ok=True)
         os.makedirs(f"{shared_directory}/all_inputs/", exist_ok=True)
 
@@ -617,7 +657,7 @@ class TrainingEnv:
             file.write(str(start_time))
 
         # setup magma monitor
-        neo_docker.run_command_in_thread("./magma/magma/init_magma_monitor.sh")
+        neo_docker.run_command_in_thread("/magma/magma/init_magma_monitor.sh")
 
         iteration = 0
         seeds = True
@@ -648,7 +688,7 @@ class TrainingEnv:
                     content = decode_str(content_bytes)
                 # generate mutation
                 if content is not None:
-                    mutation = self.generate_mutation(content)
+                    mutation = self.generate_mutation(content)  # type: ignore
                 else:
                     continue
                 time_stamp = str(time.time())
@@ -693,6 +733,7 @@ class TrainingEnv:
         # return
         return glob.glob(f"{eval_dir}/reports/*.json"), glob.glob(f"{eval_dir}/monitor/*"), eval_dir
 
+    @no_type_check
     def generate_mutation(self, prompt: str) -> str:
         """
         Generates a mutated version of a given prompt using the model and tokenizer.
@@ -706,13 +747,14 @@ class TrainingEnv:
         @rtype: Str
         """
 
+        @no_type_check
         def generate_code(
-            p_prompt: str,
-            p_model: Any,
-            p_tokenizer: Any,
-            max_new_tokens: int = 100,
-            num_return_sequences: int = 1,
-        ) -> list[str]:
+            p_prompt,
+            p_model,
+            p_tokenizer,
+            max_new_tokens=100,
+            num_return_sequences=1,
+        ) -> Any:
             inputs = p_tokenizer.encode(p_prompt, return_tensors="pt")
             outputs = p_model.generate(
                 inputs,
@@ -729,9 +771,9 @@ class TrainingEnv:
 
         ls = LengthSampler(1, 512)
 
-        def truncate_input(input_str: str) -> Any:
-            length = int(ls())
-            truncated = input_str[:length]
+        @no_type_check
+        def truncate_input(input_str: str) -> str:
+            truncated = input_str[: ls()]
             return truncated
 
         truncated_prompt = truncate_input(prompt)
@@ -756,12 +798,12 @@ class TrainingEnv:
         """
 
         # create docker for target
-        afl_docker = MagmaContainer("afl", time_limit)
+        afl_docker = MagmaContainer("afl++", time_limit)
         self.magma_eval_docker.append(afl_docker)
         # create logging dir
-        eval_dir = f'logs/eval/{datetime.now().strftime("%Y%m%d_%H%M%S")}_afl++_eval'
+        eval_dir = f'{self.path_eval_dir}/{datetime.now().strftime("%Y%m%d_%H%M%S")}_afl++_eval'
         os.makedirs(eval_dir, exist_ok=True)
-        shared = "workdir"
+        shared = self.path_shared_dir
         # start campaign
         afl_docker.start_afl_campaign()
         for item in os.listdir(shared):

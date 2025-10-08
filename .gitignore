@@ -122,3 +122,25 @@ dmypy.json
 
 # safety ini    
 .safety-project.ini
+
+# Weights and Biases
+wandb/
+
+# temp directory
+temp/
+
+# data directory
+# Ignore everything under data/ but allow the specific AFL corpus folder
+data/**
+!data/lua/
+!data/lua/corpus_used_afl/
+!data/lua/corpus_used_afl/**
+
+# logs
+logs/
+
+# models / tokenizers
+models/
+tokenizer/
+
+workdir/
