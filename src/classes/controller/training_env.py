@@ -293,12 +293,12 @@ class TrainingEnv:
                     error_score = data_handler.check_lua_w_teal(combined_code)
 
                     # calculate the length of the response (r) and apply the penalty
-                    if len(r) < 100:
-                        score_value = error_score - 10
-                    elif 120 <= len(r) < 150:
-                        score_value = error_score + 10
+                    if len(r) < 50:
+                        score_value = error_score - 2
+                    elif 50 <= len(r) < 75:
+                        score_value = error_score + 3
                     else:
-                        score_value = error_score + 20
+                        score_value = error_score + 5
 
                     # convert the score to a tensor
                     score_tensor = torch.tensor(score_value, dtype=torch.float)
