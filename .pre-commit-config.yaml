@@ -1,0 +1,20 @@
+repos:
+  - repo: local
+    hooks:
+      - id: lint
+        name: Run make lint
+        entry: make lint
+        language: system
+        pass_filenames: false
+
+      - id: typecheck
+        name: Run mypy type checks
+        entry: bash -c "cd /home/neo/Desktop/neo_fuzz_v2 && .venv/bin/mypy --config-file config/pyproject.toml src"
+        language: system
+        pass_filenames: false
+
+      - id: security
+        name: Run bandit security check
+        entry: make bandit
+        language: system
+        pass_filenames: false

@@ -1,0 +1,27 @@
+{
+  "development": {
+    "base_dir": "logs/development",
+    "master": "logs/development/master.log",
+    "debug": "logs/development/debug.log",
+    "info": "logs/development/info.log",
+    "warning": "logs/development/warning.log",
+    "error": "logs/development/error.log"
+  },
+  "test": {
+    "base_dir": "logs/test",
+    "master": "logs/test/master.log",
+    "debug": "logs/test/debug.log",
+    "info": "logs/test/info.log",
+    "warning": "logs/test/warning.log",
+    "error": "logs/test/error.log"
+  },
+  "production": {
+    "base_dir": "logs/production",
+    "master": "logs/production/master.log",
+    "debug": "logs/production/debug.log",
+    "info": "logs/production/info.log",
+    "warning": "logs/production/warning.log",
+    "error": "logs/production/error.log"
+  }     
+} 
+    

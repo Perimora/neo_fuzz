@@ -1,0 +1,3 @@
+[submodule "submodules/magma_neo_fuzz"]
+	path = submodules/magma_neo_fuzz
+	url = git@github.com:Perimora/magma_neo_fuzz.git

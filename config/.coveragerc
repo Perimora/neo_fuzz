@@ -1,0 +1,18 @@
+[run]
+branch = True
+source = src
+data_file = reports/coverage/.coverage
+
+[report]
+show_missing = True
+skip_covered = True
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+
+[html]
+directory = reports/coverage/htmlcov
+
+[xml]
+output = reports/coverage/coverage.xml
